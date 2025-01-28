@@ -1,0 +1,68 @@
+# System pre-requisites
+
+# Make sure podman is installed
+sudo yum install container-tools
+podman version
+
+# allow rootless container to open ports
+sudo sysctl net.ipv4.ip_unprivileged_port_start=443
+# (optional) after running containers, set it back to default (1025)
+# sudo sysctl net.ipv4.ip_unprivileged_port_start=1025
+
+# Add firewall allow for services
+# see before state
+sudo firewall-cmd --list-all
+# add rules
+# sudo firewall-cmd --add-service=http --permanent      -> only need to expose https
+sudo firewall-cmd --add-service=https --permanent
+# commit changes
+sudo firewall-cmd --reload
+# see after state
+sudo firewall-cmd --list-all
+
+
+
+### Log into or swap to the Nautobot account ###
+# The rest of this guide will run rootless - as a standard user
+# All files and whatnot go under the user's home directory
+# The rest of these commands run as a standard user
+# Having a proper shell open as your Nautobot user is helpful for environment variables
+
+# Create and enter nautobot directory
+mkdir $HOME/nautobot
+cd $HOME/nautobot
+
+# Create other directories
+mkdir config
+mkdir secrets
+mkdir postgres_data
+
+
+# generate cert -> pick your fav encryption algorithm
+openssl genrsa -aes-256-cbc -out nautobot.key 2048
+# generate CSR
+openssl req -key nautobot.key -new -out nautobot.csr
+# TESTING! generate self-signed cert
+# Production: take that csr and get a real cert
+
+
+### Place local.env, nautobot_config.py, nginx_nautobot.conf, and uwsgi.ini into "config" directory ###
+### Place creds.env, and nautobot cert files (nautobot.key and nautobot.crt) into "secrets" directory ###
+
+
+
+
+
+## Permissions ##
+# podman will change some permissions on directories for volumes.
+# If something messes up and you need to reset, do this:
+
+# stop all containers
+podman stop --all
+
+# reset user/group ownership
+sudo chown -R [[user]]:[[group]] $HOME/nautobot
+
+# If it's bad enough, you can fully reset podman and delete the postgres database:
+podman system reset
+rm -rf $HOME/nautobot/postgres_data/*   -> might need sudo due to permissions change by podman

@@ -1,0 +1,30 @@
+# Pull all the containers and stage in local cache
+# Good idea: use a repo to store these containers instead of just local cache
+
+
+# Log into registry1.dso.mil
+podman login registry1.dso.mil
+
+# Pull postgresql, nginx, and redis containers
+# Exactly which version of each you pull should be pretty flexible
+# If you source from somewhere else, just update the tagging below
+podman pull postgres
+podman pull nginx
+podman pull redis
+
+
+# Pull Nautobot container
+podman pull docker.io/networktocode/nautobot:stable
+
+
+# Tag (rename) for local use
+podman tag [[postgres contailer]] localhost/postgresql:latest
+podman tag [[nginx container]] localhost/nginx:latest
+podman tag [[redis container]] localhost/redis:latest
+
+
+# (optional) Add plugins to Nautobot container via dockerfile build
+# If you don't need to add anything, pull and tag the Nautobot container like above
+# Make sure any plugins are included in nautobot_config.py
+podman build -t localhost/nautobot:latest -f config/Dockerfile
+

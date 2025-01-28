@@ -1,0 +1,33 @@
+# Start the containers!
+
+# Start databases
+podman start db
+podman start redis
+
+# Wait for postgres database to finish initial boot, can watch using:
+podman logs --follow db     (ctrl-c to stop following log)
+
+
+# Start Nautobot frontend
+podman start nautobot-front
+
+# Wait for frontend to finish boot (initial boot takes several minutes)
+# Should finish with message about starting uWSGI threads
+# Can follow log using:
+podman logs --follow nautobot-front
+
+# Create admin user in Nautobot
+# (hit enter to see prompt)
+podman exec -it nautobot-front nautobot-server createsuperuser
+
+
+# Start workers
+podman start celery_beat
+podman start celery_worker
+
+
+# Start proxy
+podman start proxy
+
+
+# Congrats! You now have a working Nautobot server!

@@ -1,0 +1,113 @@
+# Create all your containers
+# These could probably just be "run" commands. If you want to do that, go ahead.
+
+
+# Need to create volumes like this due to the weird way podman handles rootless containers
+podman volume create -o device=$HOME/nautobot/postgres_data -o=o=bind vol_postgres-data
+podman volume create -o device=$HOME/nautobot/jobs -o=o=bind vol_nautobot-jobs
+
+# Create network to make DNS work
+podman network create net_nautobot
+
+
+## Postgres DB
+podman create --name=db \
+	--replace \
+	--env-file=$HOME/nautobot/config/local.env --env-file=$HOME/nautobot/secrets/creds.env \
+	-v vol_postgres-data:/var/lib/postgresql/data:z \
+	--network net_nautobot \
+	--restart=always \
+	--health-cmd='["/bin/sh,"-c","pg_isready --username=$POSTGRES_USER --dbname=$POSTGRES_DB"]' \
+	--health-interval 10s \
+	--health-timeout 5s \
+	--health-retries 10 \
+	localhost/postgresql:latest \
+	-c max_connections=1000
+
+
+## Redis
+podman create --name=redis \
+	--replace \
+	--env-file=$HOME/nautobot/config/local.env --env-file=$HOME/nautobot/secrets/creds.env \
+	--network net_nautobot \
+	--restart=always \
+	localhost/redis:latest sh -c 'redis-server --appendonly yes --requirepass $NAUTOBOT_REDIS_PASSWORD'
+
+## Nautobot frontend
+podman create --name=nautobot-front \
+	--requires=redis,db \
+	--replace \
+	--env-file=$HOME/nautobot/config/local.env --env-file=$HOME/nautobot/secrets/creds.env \
+	-v $HOME/nautobot/config/nautobot_config.py:/opt/nautobot/nautobot_config.py:ro,z \
+	-v $HOME/nautobot/config/uwsgi.ini:/opt/nautobot/uwsgi.ini:ro,z \
+	-v vol_nautobot-jobs:/opt/nautobot/jobs:z \
+	--network net_nautobot \
+	--restart=always \
+	--health-cmd "ls" \
+	--health-interval 30s \
+	--health-timeout 10s \
+	--health-start-period 1m \
+	--health-retries 3 \
+	localhost/nautobot:latest
+#	-p 8443:8443 -p 8080:8080 \		-> expose directly for testing
+
+
+## Nautobot celery beat
+podman create --name=celery_beat \
+	--replace \
+	--requires=nautobot-front,redis,db \
+	--env-file=$HOME/nautobot/config/local.env --env-file=$HOME/nautobot/secrets/creds.env \
+	--network net_nautobot \
+	--restart=always \
+	--entrypoint '["sh","-c","nautobot-server celery beat -l $NAUTOBOT_LOG_LEVEL"]' \
+	--no-healthcheck \
+	localhost/nautobot:latest
+
+
+## Nautobot celery worker
+podman create --name=celery_worker \
+	--requires=nautobot-front,redis,db \
+	--env-file=$HOME/nautobot/config/local.env --env-file=$HOME/nautobot/secrets/creds.env \
+	-v $HOME/nautobot/config/nautobot_config.py:/opt/nautobot/nautobot_config.py:ro,z \
+	-v vol_nautobot-jobs:/opt/nautobot/jobs:z \
+	--network net_nautobot \
+	--restart=always \
+	--entrypoint '["sh","-c","nautobot-server celery worker -l $NAUTOBOT_LOG_LEVEL --events"]' \
+	--healthcheck-command 'nautobot-server celery inspect ping --destination celery@$HOSTNAME' \
+	--healthcheck-interval 30s \
+	--healthcheck-timeout 10s \
+	--healthcheck-start-period 30s \
+	--healthcheck-retries 3 \
+	localhost/nautobot:latest
+
+
+## Proxy (nginx)
+podman create --name=proxy \
+	--replace \
+	--env-file=$HOME/nautobot/config/local.env --env-file=$HOME/nautobot/secrets/creds.env \
+	--network net_nautobot \
+	-p 443:443 \
+	--restart=always \
+	-v $HOME/nautobot/config/nginx_nautobot.conf:/etc/nginx/conf.d/default.conf:ro,Z \
+	-v $HOME/nautobot/secrets/nautobot.crt:/etc/pki/tls/certs/nautobot.crt:ro,Z \
+	-v $HOME/nautobot/secrets/nautobot.key:/etc/pki/tls/private/nautobot.key:ro,Z \
+	localhost/nginx:latest
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
