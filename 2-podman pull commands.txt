@@ -2,9 +2,6 @@
 # Good idea: use a repo to store these containers instead of just local cache
 
 
-# Log into registry1.dso.mil
-podman login registry1.dso.mil
-
 # Pull postgresql, nginx, and redis containers
 # Exactly which version of each you pull should be pretty flexible
 # If you source from somewhere else, just update the tagging below
